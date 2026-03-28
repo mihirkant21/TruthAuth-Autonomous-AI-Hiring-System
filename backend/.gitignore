@@ -1,0 +1,28 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Uploads, temporary media
+uploads/
+*.mp4
+reports/
+
+# Database
+*.db
+*.sqlite3
+
+# Editor/IDE directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
