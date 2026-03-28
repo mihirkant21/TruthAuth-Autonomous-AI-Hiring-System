@@ -12,4 +12,4 @@ def generate_jd(title: str, skills: str, experience: str) -> str:
     2. Key Responsibilities
     3. Qualifications
     """
-    return generate_text(prompt)
+    return generate_text(prompt, model="qwen2.5:3b")

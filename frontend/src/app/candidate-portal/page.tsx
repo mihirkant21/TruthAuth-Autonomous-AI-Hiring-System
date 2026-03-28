@@ -11,7 +11,7 @@ export default function CandidatePage() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const res = await axios.get("http://localhost:8000/jobs/");
+        const res = await axios.get("http://10.2.15.61:8000/jobs/");
         setJobs(res.data);
       } catch (err) {
         console.warn("Failed to fetch jobs:", err);
@@ -78,8 +78,8 @@ export default function CandidatePage() {
         </header>
 
         {/* Scrolling Workspace */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-12 flex items-center justify-center">
-           <div className="w-full max-w-2xl">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-12">
+           <div className="w-full max-w-2xl mx-auto">
               <CandidatePortal jobs={jobs} />
            </div>
         </div>

@@ -9,7 +9,7 @@ export default function KanbanBoard({ jobId, refreshTrigger }: { jobId: number |
 
   const fetchCandidates = async () => {
     if (!jobId) return;
-    const res = await axios.get(`http://localhost:8000/candidates/${jobId}`);
+    const res = await axios.get(`http://10.2.15.61:8000/candidates/${jobId}`);
     setCandidates(res.data);
   };
 
@@ -22,12 +22,12 @@ export default function KanbanBoard({ jobId, refreshTrigger }: { jobId: number |
   const runPipeline = async () => {
     if (!jobId) return;
     setLoading(true);
-    await axios.post(`http://localhost:8000/run-pipeline/${jobId}`);
+    await axios.post(`http://10.2.15.61:8000/run-pipeline/${jobId}`);
     setTimeout(() => { setLoading(false); fetchCandidates(); }, 2000);
   };
 
   const deactivateCandidate = async (candidateId: number) => {
-    await axios.post(`http://localhost:8000/candidates/${candidateId}/terminate`);
+    await axios.post(`http://10.2.15.61:8000/candidates/${candidateId}/terminate`);
     fetchCandidates();
   };
 
@@ -126,7 +126,7 @@ export default function KanbanBoard({ jobId, refreshTrigger }: { jobId: number |
                  
                  {(c.stage === "HIRED" || c.stage === "REJECTED") && (
                    <div className="mt-4 pt-4 border-t border-slate-800 pl-16">
-                     <button onClick={() => window.open(`http://localhost:8000/download-report/${c.id}`, "_blank")} className="text-purple-400 hover:text-purple-300 text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1">
+                     <button onClick={() => window.open(`http://10.2.15.61:8000/download-report/${c.id}`, "_blank")} className="text-purple-400 hover:text-purple-300 text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1">
                        Download Report →
                      </button>
                    </div>

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { FileText, Video, CheckCircle2, ChevronRight, Check, CheckCircle, Clock, Loader2 } from "lucide-react";
+import { FileText, Video, CheckCircle2, ChevronRight, Check, CheckCircle, Clock, Loader2, Code2, Briefcase, Brain, Star } from "lucide-react";
 
 export default function CandidatePortal({ jobs }: { jobs: any[] }) {
   const [jobId, setJobId] = useState<number | "">("");
@@ -15,11 +15,22 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
   
   const [taskText, setTaskText] = useState("");
   const [stage, setStage] = useState<string | null>(null);
+  const [assessment, setAssessment] = useState<any>(null);
+  const [isFetchingAssessment, setIsFetchingAssessment] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<any>(null);
+
+  // MCQ: { "0": "answer text", "1": "answer text", ... }
+  const [mcqAnswers, setMcqAnswers] = useState<Record<string, string>>({});
+  // Code: { "0": "code string", "1": "code string", ... }
+  const [codeAnswers, setCodeAnswers] = useState<Record<string, string>>({});
+  // Task URL
+  const [taskUrl, setTaskUrl] = useState("");
 
   const fetchStatus = async () => {
     if (!jobId || !candidateId) return;
     try {
-      const res = await axios.get(`http://localhost:8000/candidates/${jobId}`);
+      const res = await axios.get(`http://10.2.15.61:8000/candidates/${jobId}`);
       const me = res.data.find((c: any) => c.id === candidateId);
       if (me) setStage(me.stage);
     } catch (err) {
@@ -32,6 +43,23 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     return () => clearInterval(int);
   }, [jobId, candidateId]);
 
+  // Fetch assessment once we have a candidateId and no assessment yet
+  useEffect(() => {
+    if (!candidateId || assessment) return;
+    const fetchAssessment = async () => {
+      setIsFetchingAssessment(true);
+      try {
+        const res = await axios.get(`http://10.2.15.61:8000/candidates/${candidateId}/assessment`);
+        if (res.data?.assessment) setAssessment(res.data.assessment);
+      } catch {
+        // Assessment not ready yet — will retry on next render cycle
+      } finally {
+        setIsFetchingAssessment(false);
+      }
+    };
+    fetchAssessment();
+  }, [candidateId, assessment]);
+
   const handleCvUpload = async (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -40,7 +68,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await axios.post("http://localhost:8000/candidates/extract-cv-info/", formData);
+      const res = await axios.post("http://10.2.15.61:8000/candidates/extract-cv-info/", formData);
       if (res.data) {
         if (res.data.name) setName(res.data.name);
         if (res.data.skills && Array.isArray(res.data.skills)) setSkills(res.data.skills.join(", "));
@@ -63,7 +91,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     data.append("experience", experience);
     data.append("file", cvFile);
     try {
-       const res = await axios.post(`http://localhost:8000/candidates/upload-cv/`, data);
+       const res = await axios.post(`http://10.2.15.61:8000/candidates/upload-cv/`, data);
        if (res.data.status === "rejected") {
            alert(res.data.message);
            if (res.data.candidate) {
@@ -71,9 +99,10 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
                setStage(res.data.candidate.stage);
            }
        } else if (res.data.status === "accepted") {
-           alert(res.data.message);
            setCandidateId(res.data.candidate.id);
            setStage(res.data.candidate.stage);
+           // Store assessment directly from response if available
+           if (res.data.assessment) setAssessment(res.data.assessment);
        }
     } catch (err: any) {
         if (err.response?.data?.message) {
@@ -88,11 +117,21 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
 
   const handleTaskSubmit = async () => {
     if (!candidateId) return;
-    const formData = new FormData();
-    formData.append("task_submission", taskText);
-    await axios.post(`http://localhost:8000/candidates/${candidateId}/submit-task`, formData);
-    fetchStatus();
-    setTaskText("Submitted effectively. Awaiting evaluation.");
+    setIsSubmitting(true);
+    const form = new FormData();
+    form.append("task_submission", taskText || "-");
+    form.append("mcq_answers", JSON.stringify(mcqAnswers));
+    form.append("code_answers", JSON.stringify(codeAnswers));
+    form.append("task_url", taskUrl);
+    try {
+      const res = await axios.post(`http://10.2.15.61:8000/candidates/${candidateId}/submit-task`, form);
+      setSubmissionResult(res.data);
+      setStage("TASK_COMPLETED");
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Submission failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleVideoUpload = async (e: any) => {
@@ -100,7 +139,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     if (!file || !candidateId) return;
     const formData = new FormData();
     formData.append("file", file);
-    await axios.post(`http://localhost:8000/candidates/${candidateId}/upload-video`, formData);
+    await axios.post(`http://10.2.15.61:8000/candidates/${candidateId}/upload-video`, formData);
     fetchStatus();
   };
 
@@ -158,9 +197,9 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
           <div className="space-y-6">
             <div>
                <label className="text-xs font-bold text-slate-400 mb-2 block">Target Array</label>
-               <select value={jobId} onChange={e => setJobId(Number(e.target.value))} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none appearance-none text-sm font-medium cursor-pointer">
+               <select value={jobId.toString()} onChange={e => setJobId(e.target.value ? Number(e.target.value) : "")} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none appearance-none text-sm font-medium cursor-pointer">
                  <option value="">Select configuration...</option>
-                 {jobs.map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
+                 {jobs.filter(j => j.generated_jd).map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
                </select>
             </div>
             
@@ -170,13 +209,27 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
             </div>
 
             <div>
-               <label className="text-xs font-bold text-slate-400 mb-2 block">Extracted Skills</label>
-               <textarea placeholder="Skills will auto-fill on CV upload..." value={skills} onChange={e => setSkills(e.target.value)} rows={2} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar" />
+               <div className="flex items-center justify-between mb-2">
+                 <label className="text-xs font-bold text-slate-400 block">Extracted Skills</label>
+                 {skills && cvFile && (
+                   <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                     <Check size={10} /> Extracted from PDF
+                   </span>
+                 )}
+               </div>
+               <textarea placeholder="Skills will auto-fill on CV upload..." value={skills} onChange={e => setSkills(e.target.value)} rows={2} className={`w-full p-3 border ${skills && cvFile ? 'border-emerald-500/30' : 'border-slate-800'} bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar`} />
             </div>
 
             <div>
-               <label className="text-xs font-bold text-slate-400 mb-2 block">Professional Experience</label>
-               <textarea placeholder="Experience will auto-fill on CV upload..." value={experience} onChange={e => setExperience(e.target.value)} rows={3} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar" />
+               <div className="flex items-center justify-between mb-2">
+                 <label className="text-xs font-bold text-slate-400 block">Professional Experience</label>
+                 {experience && cvFile && (
+                   <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                     <Check size={10} /> Extracted from PDF
+                   </span>
+                 )}
+               </div>
+               <textarea placeholder="Experience will auto-fill on CV upload..." value={experience} onChange={e => setExperience(e.target.value)} rows={3} className={`w-full p-3 border ${experience && cvFile ? 'border-emerald-500/30' : 'border-slate-800'} bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar`} />
             </div>
 
             <div>
@@ -228,21 +281,182 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
 
             <div className="mt-12">
               {(stage === "SCREENED" || stage === "TASK_COMPLETED") && (
-                <div className="bg-[#0a0e17] border border-slate-800 rounded-xl p-6">
-                  <div className="flex items-center gap-4 mb-6">
-                     <div className="bg-slate-800 p-3 rounded-lg text-slate-300"><FileText size={24}/></div>
-                     <div>
-                       <h3 className="text-lg font-bold text-slate-200">Technical Task Submission</h3>
-                       <p className="text-xs text-slate-400 font-medium mt-1">Provide your repository proof snippet.</p>
-                     </div>
-                  </div>
-                  <textarea placeholder="Paste repository URI or code block..." value={taskText} onChange={e => setTaskText(e.target.value)} rows={5} className="w-full p-4 bg-[#141c2b] border border-slate-700 rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-xs font-mono mb-4 text-slate-300 placeholder-slate-600 outline-none custom-scrollbar" />
-                  <button 
-                    disabled={stage === "TASK_COMPLETED"} onClick={handleTaskSubmit} 
-                    className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-slate-800 disabled:text-slate-500 text-[#0a0e17] font-bold px-6 py-3 rounded-lg transition-colors text-sm"
-                  >
-                    {stage === "TASK_COMPLETED" ? "Submitted" : "Transmit Task Data"}
-                  </button>
+                <div className="space-y-6">
+
+                  {/* Assessment Section */}
+                  {isFetchingAssessment && (
+                    <div className="bg-[#0a0e17] border border-slate-800 rounded-xl p-6 flex items-center gap-4">
+                      <Loader2 size={24} className="text-purple-400 animate-spin shrink-0" />
+                      <div>
+                        <p className="font-bold text-slate-200 text-sm">Generating Your Personalized Assessment...</p>
+                        <p className="text-xs text-slate-500 mt-1">AI is crafting questions based on your profile.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {assessment && (
+                    <div className="bg-[#0a0e17] border border-slate-800 rounded-xl overflow-hidden">
+                      {/* Assessment Header */}
+                      <div className="bg-gradient-to-r from-purple-900/40 to-slate-900/40 border-b border-slate-800 p-5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-purple-500/20 p-2.5 rounded-lg">
+                            <Brain size={20} className="text-purple-400" />
+                          </div>
+                          <div>
+                            <h3 className="text-base font-bold text-slate-100">Your AI Interview Assessment</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Answer all sections, then submit below</p>
+                          </div>
+                        </div>
+                        <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border ${
+                          assessment.candidate_level === 'Advanced'
+                            ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                            : assessment.candidate_level === 'Beginner'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                        }`}>
+                          {assessment.candidate_level}
+                        </span>
+                      </div>
+
+                      <div className="p-5 space-y-8">
+
+                        {/* ── MCQs ── */}
+                        {assessment.mcq?.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-4">
+                              <Star size={14} className="text-purple-400" />
+                              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Multiple Choice Questions</h4>
+                              <span className="text-[10px] text-slate-600 font-medium ml-auto">{Object.keys(mcqAnswers).length}/{assessment.mcq.length} answered</span>
+                            </div>
+                            <div className="space-y-4">
+                              {assessment.mcq.map((q: any, idx: number) => (
+                                <div key={idx} className="bg-[#141c2b] border border-slate-800 rounded-lg p-4">
+                                  <p className="text-sm font-semibold text-slate-200 mb-3 leading-relaxed">
+                                    <span className="text-purple-400 font-bold mr-2">Q{idx + 1}.</span>{q.question}
+                                  </p>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {q.options?.map((opt: string, oIdx: number) => {
+                                      const isSelected = mcqAnswers[String(idx)] === opt;
+                                      return (
+                                        <button
+                                          key={oIdx}
+                                          onClick={() => setMcqAnswers(prev => ({...prev, [String(idx)]: opt}))}
+                                          disabled={stage === "TASK_COMPLETED"}
+                                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-xs font-medium transition-all text-left w-full ${
+                                            isSelected
+                                              ? 'border-purple-500/70 bg-purple-500/15 text-purple-200'
+                                              : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:bg-slate-800/40'
+                                          }`}
+                                        >
+                                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                            isSelected ? 'bg-purple-500 text-[#0a0e17]' : 'bg-slate-800 text-slate-500'
+                                          }`}>
+                                            {['A','B','C','D'][oIdx]}
+                                          </span>
+                                          {opt}
+                                          {isSelected && <Check size={12} className="ml-auto text-purple-400" strokeWidth={3} />}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Coding Challenges ── */}
+                        {assessment.coding?.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-4">
+                              <Code2 size={14} className="text-purple-400" />
+                              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Coding Challenges</h4>
+                            </div>
+                            <div className="space-y-4">
+                              {assessment.coding.map((c: any, idx: number) => (
+                                <div key={idx} className="bg-[#141c2b] border border-slate-800 rounded-lg overflow-hidden">
+                                  <div className="flex items-start justify-between gap-3 p-4 pb-3">
+                                    <p className="text-sm font-bold text-slate-200">{c.title}</p>
+                                    <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full shrink-0 ${
+                                      c.difficulty === 'Hard'
+                                        ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                                        : c.difficulty === 'Easy'
+                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                        : 'bg-orange-500/10 text-orange-400 border border-orange-500/30'
+                                    }`}>
+                                      {c.difficulty}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-400 leading-relaxed px-4 pb-3">{c.description}</p>
+                                  <div className="border-t border-slate-800 bg-[#0a0e17] px-4 py-3">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Your Solution</p>
+                                    <textarea
+                                      disabled={stage === "TASK_COMPLETED"}
+                                      value={codeAnswers[String(idx)] || ""}
+                                      onChange={e => setCodeAnswers(prev => ({...prev, [String(idx)]: e.target.value}))}
+                                      rows={6}
+                                      placeholder={`# Write your ${c.title} solution here...`}
+                                      className="w-full p-3 bg-[#141c2b] border border-slate-700 rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-xs font-mono text-slate-300 placeholder-slate-700 outline-none custom-scrollbar resize-y"
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Real-world Task ── */}
+                        {assessment.task?.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-4">
+                              <Briefcase size={14} className="text-purple-400" />
+                              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Real-world Task</h4>
+                            </div>
+                            <div className="bg-gradient-to-br from-purple-900/20 to-slate-900/20 border border-purple-500/20 rounded-lg p-5">
+                              <p className="text-sm font-bold text-slate-100 mb-2">{assessment.task[0].title}</p>
+                              <p className="text-xs text-slate-400 leading-relaxed mb-3">{assessment.task[0].description}</p>
+                              <div className="bg-[#0a0e17] border border-slate-800 rounded-lg p-3 mb-4">
+                                <p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest mb-1">Expected Outcome</p>
+                                <p className="text-xs text-slate-300 leading-relaxed">{assessment.task[0].expected_outcome}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Submit Your Work (GitHub / Live URL)</p>
+                                <input
+                                  type="url"
+                                  disabled={stage === "TASK_COMPLETED"}
+                                  value={taskUrl}
+                                  onChange={e => setTaskUrl(e.target.value)}
+                                  placeholder="https://github.com/your-username/your-repo"
+                                  className="w-full p-3 bg-[#141c2b] border border-slate-700 rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-sm font-mono text-slate-300 placeholder-slate-600 outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Submit All ── */}
+                        {stage !== "TASK_COMPLETED" ? (
+                          <button
+                            onClick={handleTaskSubmit}
+                            disabled={isSubmitting || Object.keys(mcqAnswers).length < (assessment.mcq?.length || 0)}
+                            className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-[#0a0e17] font-bold px-6 py-3.5 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+                          >
+                            {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Submitting...</> : "Submit Full Assessment"}
+                          </button>
+                        ) : (
+                          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3">
+                            <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
+                            <div>
+                              <p className="text-sm font-bold text-emerald-300">Assessment Submitted!</p>
+                              {submissionResult && <p className="text-xs text-slate-400 mt-0.5">MCQ Score: {submissionResult.mcq_score} — AI is now evaluating your submission.</p>}
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               )}
 

@@ -12,7 +12,7 @@ export default function HRDashboard() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const fetchJobs = async () => {
-    const res = await axios.get("http://localhost:8000/jobs/");
+    const res = await axios.get("http://10.2.15.61:8000/jobs/");
     setJobs(res.data);
     if (res.data.length > 0 && !selectedJob) {
       setSelectedJob(res.data[res.data.length - 1].id);
@@ -84,17 +84,19 @@ export default function HRDashboard() {
                 <p className="text-sm text-slate-400 mt-1">Welcome back! Here's an overview of the pipeline.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                 <JobForm onJobCreated={fetchJobs} />
-
-                 <div className="app-card p-6 flex flex-col justify-center border-slate-700">
-                    <div className="flex justify-between items-start mb-4">
+              <div className="flex flex-col md:flex-row gap-6 mb-2">
+                 <div className="flex-1">
+                   <JobForm onJobCreated={fetchJobs} />
+                 </div>
+                 
+                 <div className="app-card p-6 flex flex-col justify-center border-slate-700 min-w-[300px]">
+                    <div className="flex justify-between items-start">
                       <div className="w-full">
                         <p className="text-xs text-slate-400 font-medium mb-1">Active Job Context</p>
                         <select 
                           className="bg-transparent border-none outline-none text-lg font-bold text-slate-200 w-full cursor-pointer appearance-none truncate"
-                          value={selectedJob || ""} 
-                          onChange={e => setSelectedJob(Number(e.target.value))}
+                          value={selectedJob?.toString() || ""} 
+                          onChange={e => setSelectedJob(e.target.value ? Number(e.target.value) : null)}
                         >
                           <option value="" className="bg-slate-900 text-base">Select Job...</option>
                           {jobs.map(j => <option key={j.id} value={j.id} className="bg-slate-900 text-base">{j.title}</option>)}
@@ -102,18 +104,6 @@ export default function HRDashboard() {
                       </div>
                       <div className="bg-slate-800 p-3 rounded-lg text-slate-300 shrink-0 ml-2">
                         <LayoutDashboard size={20}/>
-                      </div>
-                    </div>
-                 </div>
-
-                 <div className="app-card p-6 flex flex-col justify-center">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <p className="text-xs text-slate-400 font-medium mb-1">System Health</p>
-                        <h3 className="text-xl font-bold text-slate-200">Optimal</h3>
-                      </div>
-                      <div className="bg-slate-800 p-3 rounded-lg text-slate-300">
-                        <Activity size={20}/>
                       </div>
                     </div>
                  </div>

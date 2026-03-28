@@ -18,4 +18,4 @@ def extract_resume(cv_text: str) -> dict:
     
     Return ONLY JSON. Do not include markdown formatting.
     """
-    return generate_json(prompt)
+    return generate_json(prompt, model="gemma3:4b")

@@ -22,4 +22,4 @@ def screen_cv(jd_text: str, claimed_data: dict, relaxed: bool = False) -> dict:
     
     Return ONLY JSON. Do not include markdown formatting.
     """
-    return generate_json(prompt)
+    return generate_json(prompt, model="phi3:latest")

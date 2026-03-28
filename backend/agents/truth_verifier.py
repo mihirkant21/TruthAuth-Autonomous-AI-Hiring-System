@@ -28,4 +28,4 @@ def verify_truth(claimed_data: dict, observed_data: dict, transcript: str) -> di
     
     Return ONLY JSON. Do not include markdown formatting.
     """
-    return generate_json(prompt)
+    return generate_json(prompt, model="qwen2.5:3b")

@@ -20,4 +20,4 @@ def evaluate_task(claimed_data: dict, task_submission: str) -> dict:
     
     Return ONLY JSON. Do not include markdown formatting.
     """
-    return generate_json(prompt)
+    return generate_json(prompt, model="qwen2.5:3b")

@@ -45,3 +45,6 @@ uvicorn==0.42.0
 watchfiles==1.1.1
 websockets==16.0
 PyPDF2==3.0.1
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

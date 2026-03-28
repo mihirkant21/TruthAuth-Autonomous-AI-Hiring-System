@@ -36,12 +36,23 @@ def run_pipeline(db: Session, job_id: int):
     # 2. Screening Pass
     for c in candidates:
         if c.stage == models.CandidateStage.EXTRACTED:
+            from agents import pre_filter
+            pre_filter_out = pre_filter.pre_filter_cv(job.generated_jd, c.claimed_data or {})
+            log_audit(db, "Pre-Filter Gate", {"claimed": c.claimed_data}, pre_filter_out)
+            
+            if not pre_filter_out.get("pass", False):
+                c.stage = models.CandidateStage.REJECTED
+                c.verdict = f"Failed Pre-Filter: {pre_filter_out.get('reason', 'Missing minimum requirements')}"
+                db.query(models.Candidate).filter(models.Candidate.id == c.id).update({"stage": c.stage, "verdict": c.verdict})
+                db.commit()
+                continue
+                
             # First pass
             screen_out = cv_screener.screen_cv(job.generated_jd, c.claimed_data or {}, relaxed=False)
             scores = c.scores or {}
             scores["screener"] = screen_out
             c.scores = scores
-            if screen_out.get("decision") == "advance":
+            if screen_out.get("decision") == "advance" or screen_out.get("decision") == "advance":
                 c.stage = models.CandidateStage.SCREENED # Wait for task
             else:
                 c.stage = models.CandidateStage.REJECTED

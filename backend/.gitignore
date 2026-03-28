@@ -26,3 +26,5 @@ reports/
 .vscode/
 *.swp
 *.swo
+
+credentials.json

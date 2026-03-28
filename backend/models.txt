@@ -1,0 +1,6 @@
+tinyllama:1.1b
+qwen2.5:3b
+phi3:latest
+qwen2.5:latest
+gemma3:4b
+glm4:latest

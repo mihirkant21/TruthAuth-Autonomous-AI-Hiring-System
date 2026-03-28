@@ -8,9 +8,10 @@ load_dotenv()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 MODEL_NAME = os.getenv("MODEL_NAME", "glm4")
 
-def generate_text(prompt: str, format_json: bool = False) -> str:
+def generate_text(prompt: str, format_json: bool = False, model: str = None) -> str:
+    target_model = model if model else MODEL_NAME
     payload = {
-        "model": MODEL_NAME,
+        "model": target_model,
         "prompt": prompt,
         "stream": False
     }
@@ -26,8 +27,8 @@ def generate_text(prompt: str, format_json: bool = False) -> str:
         print(f"Error calling Ollama: {e}")
         return ""
 
-def generate_json(prompt: str) -> dict:
-    result = generate_text(prompt, format_json=True)
+def generate_json(prompt: str, model: str = None) -> dict:
+    result = generate_text(prompt, format_json=True, model=model)
     try:
         if not result:
             return {}
