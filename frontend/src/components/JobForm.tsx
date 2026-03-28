@@ -5,15 +5,23 @@ import { PlusCircle, Loader2 } from "lucide-react";
 
 export default function JobForm({ onJobCreated }: { onJobCreated: () => void }) {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({ title: "", skills: "", experience: "" });
+  const [formData, setFormData] = useState({ title: "", experience: "" });
+  const [file, setFile] = useState<File | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!file) return alert("Please upload a requirements PDF");
     setLoading(true);
     try {
-      await axios.post("http://localhost:8000/jobs/", formData);
+      const data = new FormData();
+      data.append("title", formData.title);
+      data.append("experience", formData.experience);
+      data.append("file", file);
+
+      await axios.post("http://localhost:8000/jobs/upload-requirements/", data);
       onJobCreated();
-      setFormData({ title: "", skills: "", experience: "" });
+      setFormData({ title: "", experience: "" });
+      setFile(null);
     } catch (err) {
       console.error(err);
     }
@@ -39,13 +47,13 @@ export default function JobForm({ onJobCreated }: { onJobCreated: () => void }) 
             value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Job Title (e.g. Senior Dev)" 
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 relative z-20">
+          <div className="w-2/3 relative flex items-center bg-[#0a0e17] border border-slate-800 rounded-lg p-2.5 text-sm">
+            <input type="file" accept="application/pdf" onChange={e => setFile(e.target.files?.[0] || null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" required />
+            <span className="text-slate-500 font-medium truncate">{file ? file.name : "Upload Requirements PDF"}</span>
+          </div>
           <input 
-            required className="w-2/3 bg-[#0a0e17] border border-slate-800 rounded-lg p-2.5 text-sm text-slate-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all placeholder-slate-600 font-medium" 
-            value={formData.skills} onChange={e => setFormData({...formData, skills: e.target.value})} placeholder="Skills (React, Go...)" 
-          />
-          <input 
-            required className="w-1/3 bg-[#0a0e17] border border-slate-800 rounded-lg p-2.5 text-sm text-slate-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all placeholder-slate-600 font-medium" 
+            className="w-1/3 bg-[#0a0e17] border border-slate-800 rounded-lg p-2.5 text-sm text-slate-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all placeholder-slate-600 font-medium z-20 relative" 
             value={formData.experience} onChange={e => setFormData({...formData, experience: e.target.value})} placeholder="Experience Info" 
           />
         </div>

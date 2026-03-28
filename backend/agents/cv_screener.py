@@ -16,6 +16,7 @@ def screen_cv(jd_text: str, claimed_data: dict, relaxed: bool = False) -> dict:
     Evaluate the candidate and return STRICTLY a JSON object matching this schema:
     {{
       "score": <number 0-10>,
+      "match_percentage": <number 0-100 indicating percentage of requirement match>,
       "decision": "advance" or "reject"
     }}
     

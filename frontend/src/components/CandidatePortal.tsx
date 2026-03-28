@@ -7,7 +7,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
   const [jobId, setJobId] = useState<number | "">("");
   const [candidateId, setCandidateId] = useState<number | null>(null);
   const [name, setName] = useState("");
-  const [cvText, setCvText] = useState("");
+  const [cvFile, setCvFile] = useState<File | null>(null);
   
   const [taskText, setTaskText] = useState("");
   const [stage, setStage] = useState<string | null>(null);
@@ -25,10 +25,31 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
   }, [jobId, candidateId]);
 
   const handleApply = async () => {
-    if (!jobId || !name || !cvText) return alert("Fill all fields");
-    const res = await axios.post(`http://localhost:8000/candidates/?job_id=${jobId}`, { name, cv_text: cvText });
-    setCandidateId(res.data.id);
-    setStage(res.data.stage);
+    if (!jobId || !name || !cvFile) return alert("Fill all fields");
+    const data = new FormData();
+    data.append("job_id", jobId.toString());
+    data.append("name", name);
+    data.append("file", cvFile);
+    try {
+       const res = await axios.post(`http://localhost:8000/candidates/upload-cv/`, data);
+       if (res.data.status === "rejected") {
+           alert(res.data.message);
+           if (res.data.candidate) {
+               setCandidateId(res.data.candidate.id);
+               setStage(res.data.candidate.stage);
+           }
+       } else if (res.data.status === "accepted") {
+           alert(res.data.message);
+           setCandidateId(res.data.candidate.id);
+           setStage(res.data.candidate.stage);
+       }
+    } catch (err: any) {
+        if (err.response?.data?.message) {
+             alert(err.response.data.message);
+        } else {
+             alert("An error occurred during screening.");
+        }
+    }
   };
 
   const handleTaskSubmit = async () => {
@@ -115,8 +136,13 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
             </div>
 
             <div>
-               <label className="text-xs font-bold text-slate-400 mb-2 block">Unstructured Parameter Data (CV)</label>
-               <textarea placeholder="Inject parameter block (Markdown, JSON, or Raw Text)..." rows={6} value={cvText} onChange={e => setCvText(e.target.value)} className="w-full p-4 border border-slate-800 bg-[#0a0e17] text-slate-300 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all leading-relaxed custom-scrollbar outline-none font-mono text-xs" />
+               <label className="text-xs font-bold text-slate-400 mb-2 block">Candidate Resume (PDF)</label>
+               <div className="relative border-2 border-dashed border-slate-800 bg-[#0a0e17] rounded-lg p-8 flex flex-col items-center justify-center text-center hover:border-purple-500 transition-colors cursor-pointer w-full group">
+                 <input type="file" accept="application/pdf" onChange={e => setCvFile(e.target.files?.[0] || null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                 <FileText size={40} className="text-slate-600 mb-4 group-hover:text-purple-400 transition-colors" />
+                 <span className="font-bold text-slate-200 mb-1">{cvFile ? cvFile.name : "Drag & Drop CV Here"}</span>
+                 <span className="text-xs text-slate-500">{cvFile ? "Click to change file" : "Only PDF format supported"}</span>
+               </div>
             </div>
 
             <button 

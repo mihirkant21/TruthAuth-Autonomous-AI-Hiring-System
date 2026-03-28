@@ -26,6 +26,11 @@ export default function KanbanBoard({ jobId, refreshTrigger }: { jobId: number |
     setTimeout(() => { setLoading(false); fetchCandidates(); }, 2000);
   };
 
+  const deactivateCandidate = async (candidateId: number) => {
+    await axios.post(`http://localhost:8000/candidates/${candidateId}/terminate`);
+    fetchCandidates();
+  };
+
   const STAGES_LIST = [
     { id: "NEW", label: "Ingested", color: "text-slate-400" },
     { id: "EXTRACTED", label: "Extracted", color: "text-blue-400" },
@@ -86,10 +91,20 @@ export default function KanbanBoard({ jobId, refreshTrigger }: { jobId: number |
                      <span className="bg-slate-900 text-slate-400 text-xs px-3 py-1.5 rounded-full border border-slate-800 font-medium uppercase tracking-wide">
                        {stageInfo.label}
                      </span>
-                     {c.verdict && (
-                        <span className={`text-xs px-3 py-1.5 rounded-full font-bold uppercase tracking-wide border ${c.verdict === 'hire' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
-                          {c.verdict === 'hire' ? <span className="flex items-center gap-1.5"><CheckCircle2 size={14}/> Verified</span> : 'Terminated'}
+                     {c.verdict && c.stage !== "REJECTED" && (
+                        <span className={`text-xs px-3 py-1.5 rounded-full font-bold uppercase tracking-wide border ${String(c.verdict).toLowerCase().includes('pass') || String(c.verdict).toLowerCase().includes('hire') ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                          {String(c.verdict).toLowerCase().includes('pass') || String(c.verdict).toLowerCase().includes('hire') ? <span className="flex items-center gap-1.5"><CheckCircle2 size={14}/> {c.verdict}</span> : c.verdict}
                         </span>
+                     )}
+                     {c.stage === "REJECTED" && (
+                        <span className="text-xs px-3 py-1.5 rounded-full font-bold uppercase tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/30">
+                          Terminated
+                        </span>
+                     )}
+                     {c.stage !== "HIRED" && c.stage !== "REJECTED" && (
+                        <button onClick={() => deactivateCandidate(c.id)} className="ml-2 text-[10px] font-bold uppercase tracking-wider bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 px-2 py-1 rounded">
+                          Deactivate
+                        </button>
                      )}
                    </div>
                  </div>
