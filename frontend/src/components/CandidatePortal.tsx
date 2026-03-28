@@ -1,22 +1,30 @@
 "use client";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { FileText, Video, CheckCircle2, ChevronRight, Check, CheckCircle, Clock } from "lucide-react";
+import { FileText, Video, CheckCircle2, ChevronRight, Check, CheckCircle, Clock, Loader2 } from "lucide-react";
 
 export default function CandidatePortal({ jobs }: { jobs: any[] }) {
   const [jobId, setJobId] = useState<number | "">("");
   const [candidateId, setCandidateId] = useState<number | null>(null);
   const [name, setName] = useState("");
+  const [skills, setSkills] = useState("");
+  const [experience, setExperience] = useState("");
   const [cvFile, setCvFile] = useState<File | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
   
   const [taskText, setTaskText] = useState("");
   const [stage, setStage] = useState<string | null>(null);
 
   const fetchStatus = async () => {
     if (!jobId || !candidateId) return;
-    const res = await axios.get(`http://localhost:8000/candidates/${jobId}`);
-    const me = res.data.find((c: any) => c.id === candidateId);
-    if (me) setStage(me.stage);
+    try {
+      const res = await axios.get(`http://localhost:8000/candidates/${jobId}`);
+      const me = res.data.find((c: any) => c.id === candidateId);
+      if (me) setStage(me.stage);
+    } catch (err) {
+      console.warn("Polling status failed:", err);
+    }
   };
 
   useEffect(() => {
@@ -24,11 +32,35 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     return () => clearInterval(int);
   }, [jobId, candidateId]);
 
+  const handleCvUpload = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCvFile(file);
+    setIsExtracting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post("http://localhost:8000/candidates/extract-cv-info/", formData);
+      if (res.data) {
+        if (res.data.name) setName(res.data.name);
+        if (res.data.skills && Array.isArray(res.data.skills)) setSkills(res.data.skills.join(", "));
+        if (res.data.experience) setExperience(res.data.experience);
+      }
+    } catch (err) {
+      console.error("Failed to extract CV info", err);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const handleApply = async () => {
     if (!jobId || !name || !cvFile) return alert("Fill all fields");
+    setIsSigningUp(true);
     const data = new FormData();
     data.append("job_id", jobId.toString());
     data.append("name", name);
+    data.append("skills", skills);
+    data.append("experience", experience);
     data.append("file", cvFile);
     try {
        const res = await axios.post(`http://localhost:8000/candidates/upload-cv/`, data);
@@ -49,6 +81,8 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
         } else {
              alert("An error occurred during screening.");
         }
+    } finally {
+        setIsSigningUp(false);
     }
   };
 
@@ -136,20 +170,46 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
             </div>
 
             <div>
+               <label className="text-xs font-bold text-slate-400 mb-2 block">Extracted Skills</label>
+               <textarea placeholder="Skills will auto-fill on CV upload..." value={skills} onChange={e => setSkills(e.target.value)} rows={2} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar" />
+            </div>
+
+            <div>
+               <label className="text-xs font-bold text-slate-400 mb-2 block">Professional Experience</label>
+               <textarea placeholder="Experience will auto-fill on CV upload..." value={experience} onChange={e => setExperience(e.target.value)} rows={3} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar" />
+            </div>
+
+            <div>
                <label className="text-xs font-bold text-slate-400 mb-2 block">Candidate Resume (PDF)</label>
-               <div className="relative border-2 border-dashed border-slate-800 bg-[#0a0e17] rounded-lg p-8 flex flex-col items-center justify-center text-center hover:border-purple-500 transition-colors cursor-pointer w-full group">
-                 <input type="file" accept="application/pdf" onChange={e => setCvFile(e.target.files?.[0] || null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                 <FileText size={40} className="text-slate-600 mb-4 group-hover:text-purple-400 transition-colors" />
-                 <span className="font-bold text-slate-200 mb-1">{cvFile ? cvFile.name : "Drag & Drop CV Here"}</span>
-                 <span className="text-xs text-slate-500">{cvFile ? "Click to change file" : "Only PDF format supported"}</span>
+               <div className={`relative border-2 border-dashed border-slate-800 bg-[#0a0e17] rounded-lg p-8 flex flex-col items-center justify-center text-center hover:border-purple-500 transition-colors cursor-pointer w-full group ${isExtracting ? 'opacity-50 pointer-events-none' : ''}`}>
+                 <input type="file" accept="application/pdf" onChange={handleCvUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                 {isExtracting ? (
+                    <>
+                      <Loader2 size={40} className="text-purple-500 mb-4 animate-spin" />
+                      <span className="font-bold text-purple-400 mb-1">Extracting Resume Insights...</span>
+                      <span className="text-xs text-slate-500">Parsing through neural networks</span>
+                    </>
+                 ) : (
+                    <>
+                      <FileText size={40} className="text-slate-600 mb-4 group-hover:text-purple-400 transition-colors" />
+                      <span className="font-bold text-slate-200 mb-1">{cvFile ? cvFile.name : "Drag & Drop CV Here"}</span>
+                      <span className="text-xs text-slate-500">{cvFile ? "Click to change file" : "Only PDF format supported"}</span>
+                    </>
+                 )}
                </div>
             </div>
 
             <button 
               onClick={handleApply} 
-              className="w-full bg-purple-500 hover:bg-purple-400 text-[#0a0e17] rounded-lg p-3 transition-colors font-bold text-sm tracking-wide mt-4"
+              disabled={isSigningUp}
+              className="w-full bg-purple-500 hover:bg-purple-400 disabled:bg-purple-500/50 disabled:cursor-not-allowed text-[#0a0e17] rounded-lg p-3 transition-colors font-bold text-sm tracking-wide mt-4 flex justify-center items-center"
             >
-              Sign up as Candidate
+              {isSigningUp ? (
+                 <>
+                   <Loader2 size={18} className="animate-spin mr-2" />
+                   Evaluating Profile...
+                 </>
+              ) : "Sign up as Candidate"}
             </button>
           </div>
         </div>

@@ -10,8 +10,12 @@ export default function CandidatePage() {
 
   useEffect(() => {
     const fetchJobs = async () => {
-      const res = await axios.get("http://localhost:8000/jobs/");
-      setJobs(res.data);
+      try {
+        const res = await axios.get("http://localhost:8000/jobs/");
+        setJobs(res.data);
+      } catch (err) {
+        console.warn("Failed to fetch jobs:", err);
+      }
     };
     fetchJobs();
   }, []);

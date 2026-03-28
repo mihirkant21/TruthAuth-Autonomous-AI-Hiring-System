@@ -10,6 +10,7 @@ def extract_resume(cv_text: str) -> dict:
     
     Return STRICTLY a JSON object matching this schema:
     {{
+      "name": "<candidate's full name>",
       "skills": ["<skill1>", "<skill2>"],
       "experience": "<summary of years and roles>",
       "projects": ["<project1>", "<project2>"]

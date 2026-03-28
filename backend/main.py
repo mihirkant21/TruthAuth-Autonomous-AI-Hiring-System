@@ -71,10 +71,19 @@ def add_candidate(candidate: schemas.CandidateCreate, job_id: int, background_ta
 def get_candidates(job_id: int, db: Session = Depends(database.get_db)):
     return db.query(models.Candidate).filter(models.Candidate.job_id == job_id).all()
 
+@app.post("/candidates/extract-cv-info/")
+def extract_cv_info(file: UploadFile = File(...)):
+    cv_text = extract_text_from_pdf(file)
+    from agents import resume_extractor
+    extracted_data = resume_extractor.extract_resume(cv_text)
+    return extracted_data
+
 @app.post("/candidates/upload-cv/")
 def upload_candidate_cv(
     job_id: int = Form(...),
     name: str = Form(...),
+    skills: str = Form(""),
+    experience: str = Form(""),
     file: UploadFile = File(...),
     db: Session = Depends(database.get_db)
 ):
@@ -90,13 +99,19 @@ def upload_candidate_cv(
     db.refresh(db_candidate)
 
     # Synchronous evaluation
-    from agents import resume_extractor, cv_screener
+    from agents import cv_screener
     import orchestrator
 
-    extract_out = resume_extractor.extract_resume(cv_text)
+    extract_out = {
+        "name": name,
+        "skills": [s.strip() for s in skills.split(",") if s.strip()],
+        "experience": experience,
+        "projects": []
+    }
+    
     db_candidate.claimed_data = extract_out
     db_candidate.stage = models.CandidateStage.EXTRACTED
-    orchestrator.log_audit(db, "Resume Extractor (Sync)", {"cv_text": cv_text[:100]}, extract_out)
+    orchestrator.log_audit(db, "Resume Extractor (Sync Form Bypass)", {"cv_text": cv_text[:100]}, extract_out)
     db.commit()
 
     screen_out = cv_screener.screen_cv(job.generated_jd, extract_out, relaxed=False)
