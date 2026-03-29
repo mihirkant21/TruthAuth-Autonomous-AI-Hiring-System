@@ -15,7 +15,7 @@ export default function JobForm({ onJobCreated }: { onJobCreated: () => void }) 
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await axios.post("http://10.2.15.61:8000/jobs/", {
+      const res = await axios.post("http://127.0.0.1:8000/jobs/", {
         title: formData.title,
         experience: formData.experience,
         skills: ""
@@ -37,7 +37,7 @@ export default function JobForm({ onJobCreated }: { onJobCreated: () => void }) 
       const data = new FormData();
       data.append("file", file);
 
-      const res = await axios.post(`http://10.2.15.61:8000/jobs/${createdJobId}/upload-requirements/`, data);
+      const res = await axios.post(`http://127.0.0.1:8000/jobs/${createdJobId}/upload-requirements/`, data);
       setExtractedJD(res.data.generated_jd);
       onJobCreated();
       setFormData({ title: "", experience: "" });

@@ -29,6 +29,8 @@ def generate_text(prompt: str, format_json: bool = False, model: str = None) -> 
 
 def generate_json(prompt: str, model: str = None) -> dict:
     result = generate_text(prompt, format_json=True, model=model)
+    print(f"DEBUG: raw ollama json result = {result}")
+    
     try:
         if not result:
             return {}

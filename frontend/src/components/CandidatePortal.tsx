@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { FileText, Video, CheckCircle2, ChevronRight, Check, CheckCircle, Clock, Loader2, Code2, Briefcase, Brain, Star } from "lucide-react";
+import { FileText, Video, CheckCircle2, ChevronRight, Check, CheckCircle, Clock, Loader2, Code2, Briefcase, Brain, Star, Mic, PlayCircle, StopCircle } from "lucide-react";
 
-export default function CandidatePortal({ jobs }: { jobs: any[] }) {
-  const [jobId, setJobId] = useState<number | "">("");
+export default function CandidatePortal({ jobs, preselectedJobId, onApplicationSubmitted }: { jobs: any[], preselectedJobId?: number | null, onApplicationSubmitted?: (candidateId: number, jobId: number) => void }) {
+  const [jobId, setJobId] = useState<number | "">(preselectedJobId || "");
   const [candidateId, setCandidateId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [skills, setSkills] = useState("");
@@ -30,7 +30,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
   const fetchStatus = async () => {
     if (!jobId || !candidateId) return;
     try {
-      const res = await axios.get(`http://10.2.15.61:8000/candidates/${jobId}`);
+      const res = await axios.get(`http://127.0.0.1:8000/candidates/${jobId}`);
       const me = res.data.find((c: any) => c.id === candidateId);
       if (me) setStage(me.stage);
     } catch (err) {
@@ -49,7 +49,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     const fetchAssessment = async () => {
       setIsFetchingAssessment(true);
       try {
-        const res = await axios.get(`http://10.2.15.61:8000/candidates/${candidateId}/assessment`);
+        const res = await axios.get(`http://127.0.0.1:8000/candidates/${candidateId}/assessment`);
         if (res.data?.assessment) setAssessment(res.data.assessment);
       } catch {
         // Assessment not ready yet — will retry on next render cycle
@@ -68,7 +68,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await axios.post("http://10.2.15.61:8000/candidates/extract-cv-info/", formData);
+      const res = await axios.post("http://127.0.0.1:8000/candidates/extract-cv-info/", formData);
       if (res.data) {
         if (res.data.name) setName(res.data.name);
         if (res.data.skills && Array.isArray(res.data.skills)) setSkills(res.data.skills.join(", "));
@@ -91,7 +91,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     data.append("experience", experience);
     data.append("file", cvFile);
     try {
-       const res = await axios.post(`http://10.2.15.61:8000/candidates/upload-cv/`, data);
+       const res = await axios.post(`http://127.0.0.1:8000/candidates/upload-cv/`, data);
        if (res.data.status === "rejected") {
            alert(res.data.message);
            if (res.data.candidate) {
@@ -99,10 +99,15 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
                setStage(res.data.candidate.stage);
            }
        } else if (res.data.status === "accepted") {
-           setCandidateId(res.data.candidate.id);
+           const cid = res.data.candidate.id;
+           setCandidateId(cid);
            setStage(res.data.candidate.stage);
            // Store assessment directly from response if available
            if (res.data.assessment) setAssessment(res.data.assessment);
+           if (onApplicationSubmitted) {
+             // Short delay so candidate sees the pipeline view before parent switches tab
+             setTimeout(() => onApplicationSubmitted(cid, Number(jobId)), 1500);
+           }
        }
     } catch (err: any) {
         if (err.response?.data?.message) {
@@ -124,7 +129,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     form.append("code_answers", JSON.stringify(codeAnswers));
     form.append("task_url", taskUrl);
     try {
-      const res = await axios.post(`http://10.2.15.61:8000/candidates/${candidateId}/submit-task`, form);
+      const res = await axios.post(`http://127.0.0.1:8000/candidates/${candidateId}/submit-task`, form);
       setSubmissionResult(res.data);
       setStage("TASK_COMPLETED");
     } catch (err: any) {
@@ -134,13 +139,86 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
     }
   };
 
-  const handleVideoUpload = async (e: any) => {
-    const file = e.target.files[0];
-    if (!file || !candidateId) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    await axios.post(`http://10.2.15.61:8000/candidates/${candidateId}/upload-video`, formData);
-    fetchStatus();
+  const [interviewStarted, setInterviewStarted] = useState(false);
+  const [interviewQuestion, setInterviewQuestion] = useState<{question: string, context: string} | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(180);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+
+  const startInterview = async () => {
+     setInterviewStarted(true);
+     try {
+       const res = await axios.get(`http://127.0.0.1:8000/candidates/${candidateId}/interview-prompt`);
+       setInterviewQuestion(res.data);
+     } catch (err) {
+       setInterviewQuestion({question: "Please describe your professional background and why you are a good fit.", context: "Fallback question"});
+     }
+  };
+
+  const startRecording = async () => {
+     try {
+       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+       const recorder = new MediaRecorder(stream);
+       mediaRecorderRef.current = recorder;
+       audioChunksRef.current = [];
+
+       recorder.ondataavailable = (e) => {
+         if (e.data.size > 0) audioChunksRef.current.push(e.data);
+       };
+
+       recorder.onstop = () => {
+         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+         submitAudio(audioBlob);
+         stream.getTracks().forEach(track => track.stop());
+       };
+
+       recorder.start();
+       setIsRecording(true);
+       setTimeLeft(180);
+     } catch (err) {
+       alert("Microphone access denied. Please allow microphone access to proceed.");
+     }
+  };
+
+  const stopRecording = () => {
+     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+     }
+     setIsRecording(false);
+  };
+
+  const submitAudio = async (blob: Blob) => {
+     setIsUploadingAudio(true);
+     const formData = new FormData();
+     formData.append("file", blob, "interview.webm");
+     try {
+       await axios.post(`http://127.0.0.1:8000/candidates/${candidateId}/upload-video`, formData);
+       fetchStatus();
+     } catch (e) {
+       alert("Upload failed.");
+     } finally {
+       setIsUploadingAudio(false);
+     }
+  };
+
+  useEffect(() => {
+     let timer: any;
+     if (isRecording && timeLeft > 0) {
+        timer = setInterval(() => {
+           setTimeLeft(prev => prev - 1);
+        }, 1000);
+     } else if (isRecording && timeLeft <= 0) {
+        stopRecording();
+     }
+     return () => clearInterval(timer);
+  }, [isRecording, timeLeft]);
+
+  const formatTime = (secs: number) => {
+     const m = Math.floor(secs / 60);
+     const s = secs % 60;
+     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   const renderTimeline = () => {
@@ -197,15 +275,15 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
           <div className="space-y-6">
             <div>
                <label className="text-xs font-bold text-slate-400 mb-2 block">Target Array</label>
-               <select value={jobId.toString()} onChange={e => setJobId(e.target.value ? Number(e.target.value) : "")} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none appearance-none text-sm font-medium cursor-pointer">
+               <select value={jobId || ""} onChange={e => setJobId(e.target.value ? Number(e.target.value) : "")} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none appearance-none text-sm font-medium cursor-pointer">
                  <option value="">Select configuration...</option>
                  {jobs.filter(j => j.generated_jd).map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
                </select>
             </div>
             
             <div>
-               <label className="text-xs font-bold text-slate-400 mb-2 block">Subject Designation</label>
-               <input placeholder="Enter authoritative identifier" value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium" />
+               <label className="text-xs font-bold text-slate-400 mb-2 block">Candidate Name</label>
+               <input placeholder="Enter authoritative identifier" value={name || ""} onChange={e => setName(e.target.value)} className="w-full p-3 border border-slate-800 bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium" />
             </div>
 
             <div>
@@ -217,7 +295,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
                    </span>
                  )}
                </div>
-               <textarea placeholder="Skills will auto-fill on CV upload..." value={skills} onChange={e => setSkills(e.target.value)} rows={2} className={`w-full p-3 border ${skills && cvFile ? 'border-emerald-500/30' : 'border-slate-800'} bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar`} />
+               <textarea placeholder="Skills will auto-fill on CV upload..." value={skills || ""} onChange={e => setSkills(e.target.value)} rows={2} className={`w-full p-3 border ${skills && cvFile ? 'border-emerald-500/30' : 'border-slate-800'} bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar`} />
             </div>
 
             <div>
@@ -229,7 +307,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
                    </span>
                  )}
                </div>
-               <textarea placeholder="Experience will auto-fill on CV upload..." value={experience} onChange={e => setExperience(e.target.value)} rows={3} className={`w-full p-3 border ${experience && cvFile ? 'border-emerald-500/30' : 'border-slate-800'} bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar`} />
+               <textarea placeholder="Experience will auto-fill on CV upload..." value={experience || ""} onChange={e => setExperience(e.target.value)} rows={3} className={`w-full p-3 border ${experience && cvFile ? 'border-emerald-500/30' : 'border-slate-800'} bg-[#0a0e17] text-slate-200 placeholder-slate-600 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all outline-none text-sm font-medium custom-scrollbar`} />
             </div>
 
             <div>
@@ -280,7 +358,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
             {renderTimeline()}
 
             <div className="mt-12">
-              {(stage === "SCREENED" || stage === "TASK_COMPLETED") && (
+              {(stage === "SCREENED" || stage === "TASK_ASSIGNED" || stage === "TASK_COMPLETED") && (
                 <div className="space-y-6">
 
                   {/* Assessment Section */}
@@ -365,15 +443,15 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
                           </div>
                         )}
 
-                        {/* ── Coding Challenges ── */}
-                        {assessment.coding?.length > 0 && (
+                        {/* ── Practical Challenges ── */}
+                        {assessment.practical?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-2 mb-4">
                               <Code2 size={14} className="text-purple-400" />
-                              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Coding Challenges</h4>
+                              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Practical Challenges / Case Studies</h4>
                             </div>
                             <div className="space-y-4">
-                              {assessment.coding.map((c: any, idx: number) => (
+                              {assessment.practical.map((c: any, idx: number) => (
                                 <div key={idx} className="bg-[#141c2b] border border-slate-800 rounded-lg overflow-hidden">
                                   <div className="flex items-start justify-between gap-3 p-4 pb-3">
                                     <p className="text-sm font-bold text-slate-200">{c.title}</p>
@@ -395,7 +473,7 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
                                       value={codeAnswers[String(idx)] || ""}
                                       onChange={e => setCodeAnswers(prev => ({...prev, [String(idx)]: e.target.value}))}
                                       rows={6}
-                                      placeholder={`# Write your ${c.title} solution here...`}
+                                      placeholder={`Write your ${c.title} response here...`}
                                       className="w-full p-3 bg-[#141c2b] border border-slate-700 rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-xs font-mono text-slate-300 placeholder-slate-700 outline-none custom-scrollbar resize-y"
                                     />
                                   </div>
@@ -420,11 +498,11 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
                                 <p className="text-xs text-slate-300 leading-relaxed">{assessment.task[0].expected_outcome}</p>
                               </div>
                               <div>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Submit Your Work (GitHub / Live URL)</p>
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Submit Your Work (Portfolio / Repo / Drive Link)</p>
                                 <input
                                   type="url"
                                   disabled={stage === "TASK_COMPLETED"}
-                                  value={taskUrl}
+                                  value={taskUrl || ""}
                                   onChange={e => setTaskUrl(e.target.value)}
                                   placeholder="https://github.com/your-username/your-repo"
                                   className="w-full p-3 bg-[#141c2b] border border-slate-700 rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-sm font-mono text-slate-300 placeholder-slate-600 outline-none"
@@ -463,18 +541,61 @@ export default function CandidatePortal({ jobs }: { jobs: any[] }) {
               {stage === "INTERVIEWED" && (
                 <div className="bg-[#0a0e17] border border-slate-800 rounded-xl p-6">
                   <div className="flex items-center gap-4 mb-6">
-                     <div className="bg-slate-800 p-3 rounded-lg text-slate-300"><Video size={24}/></div>
+                     <div className="bg-slate-800 p-3 rounded-lg text-slate-300"><Mic size={24}/></div>
                      <div>
-                       <h3 className="text-lg font-bold text-slate-200">Vocal Analysis Module</h3>
-                       <p className="text-xs text-slate-400 font-medium mt-1">Upload a brief video/audio response. Whisper will handle extraction.</p>
+                       <h3 className="text-lg font-bold text-slate-200">Conversational AI Interview</h3>
+                       <p className="text-xs text-slate-400 font-medium mt-1">Answer the AI generated scenario directly in your browser.</p>
                      </div>
                   </div>
-                  <div className="bg-[#141c2b] border border-slate-700 border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer hover:border-purple-500/50 transition-all relative group">
-                    <input type="file" accept="video/*,audio/*" onChange={handleVideoUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                    <Video size={40} className="text-slate-500 mb-4 group-hover:text-purple-400 transition-colors"/>
-                    <span className="font-bold text-slate-200 mb-1">Upload Media</span>
-                    <span className="text-xs text-slate-500">MP4, WebM, MP3, WAV</span>
-                  </div>
+                  
+                  {!interviewStarted ? (
+                    <div className="bg-[#141c2b] border border-slate-700 rounded-xl p-10 flex flex-col items-center justify-center text-center">
+                        <Brain size={48} className="text-purple-500 mb-4 animate-pulse" />
+                        <h4 className="text-lg font-bold text-slate-200 mb-2">Ready for your Interview?</h4>
+                        <p className="text-sm text-slate-400 max-w-sm mb-6">The AI will generate a tough, highly personalized scenario based on your profile. You will have exactly 3 minutes to record your verbal response.</p>
+                        <button onClick={startInterview} className="bg-purple-500 hover:bg-purple-400 text-[#0a0e17] px-6 py-3 rounded-lg font-bold transition-all flex items-center gap-2">
+                            <PlayCircle size={20} /> Begin AI Interview
+                        </button>
+                    </div>
+                  ) : !interviewQuestion ? (
+                    <div className="bg-[#141c2b] border border-slate-700 rounded-xl p-10 flex flex-col items-center justify-center text-center">
+                        <Loader2 size={40} className="text-purple-500 mb-4 animate-spin" />
+                        <span className="font-bold text-slate-200">Generating Personalized Scenario...</span>
+                    </div>
+                  ) : isUploadingAudio ? (
+                    <div className="bg-[#141c2b] border border-slate-700 rounded-xl p-10 flex flex-col items-center justify-center text-center">
+                        <Loader2 size={40} className="text-emerald-500 mb-4 animate-spin" />
+                        <span className="font-bold text-slate-200">Transcribing & Analyzing Response...</span>
+                        <span className="text-xs text-slate-500 mt-2">Whisper neural net is processing your audio.</span>
+                    </div>
+                  ) : (
+                    <div className="bg-[#141c2b] border border-purple-500/30 rounded-xl overflow-hidden">
+                        <div className="bg-purple-500/10 border-b border-purple-500/20 p-6">
+                           <p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest mb-3">AI Interviewer</p>
+                           <p className="text-lg font-medium text-slate-200 leading-relaxed">"{interviewQuestion.question}"</p>
+                        </div>
+                        <div className="p-6 flex flex-col items-center">
+                           <div className="text-3xl font-mono text-slate-200 font-bold mb-6 tracking-wider">
+                              {formatTime(timeLeft)}
+                           </div>
+                           
+                           {!isRecording ? (
+                              <button onClick={startRecording} className="bg-emerald-500 hover:bg-emerald-400 text-[#0a0e17] px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                                  <Mic size={20} /> Start Recording
+                              </button>
+                           ) : (
+                              <div className="flex flex-col items-center gap-4">
+                                  <div className="flex items-center gap-2 text-rose-400 font-bold animate-pulse text-sm">
+                                      <div className="w-3 h-3 rounded-full bg-rose-500"></div> Recording in progress...
+                                  </div>
+                                  <button onClick={stopRecording} className="bg-rose-500 hover:bg-rose-400 text-white px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
+                                      <StopCircle size={20} /> Stop & Submit Answer
+                                  </button>
+                              </div>
+                           )}
+                        </div>
+                    </div>
+                  )}
                 </div>
               )}
 

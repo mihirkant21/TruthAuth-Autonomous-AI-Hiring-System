@@ -6,17 +6,19 @@ def generate_report(candidate_name: str, scores: dict, verdict: str) -> str:
     reports_dir = os.path.join(os.path.dirname(__file__), "reports")
     os.makedirs(reports_dir, exist_ok=True)
     
-    filename = f"{candidate_name.replace(' ', '_')}_Truth_Report.pdf"
+    c_name = str(candidate_name) if candidate_name else "Candidate"
+    filename = f"{c_name.replace(' ', '_')}_Truth_Report.pdf"
     filepath = os.path.join(reports_dir, filename)
     
     c = canvas.Canvas(filepath, pagesize=letter)
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(100, 750, f"Truth-Verified Evaluation Report: {candidate_name}")
+    c.drawString(100, 750, f"Truth-Verified Evaluation Report: {c_name}")
     
     c.setFont("Helvetica", 12)
     y = 710
     
-    c.drawString(100, y, f"Final AI Hiring Verdict: {verdict.upper()}")
+    v_str = str(verdict).upper() if verdict else "UNKNOWN"
+    c.drawString(100, y, f"Final AI Hiring Verdict: {v_str}")
     y -= 30
     
     c.drawString(100, y, "--- Screener Evaluation ---")

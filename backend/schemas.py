@@ -22,6 +22,7 @@ class CandidateResponse(BaseModel):
     job_id: int
     name: str
     stage: str
+    created_at: Optional[datetime] = None
     claimed_data: Optional[Dict[str, Any]] = None
     observed_data: Optional[Dict[str, Any]] = None
     interview_transcript: Optional[str] = None

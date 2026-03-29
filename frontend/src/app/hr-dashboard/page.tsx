@@ -12,7 +12,7 @@ export default function HRDashboard() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const fetchJobs = async () => {
-    const res = await axios.get("http://10.2.15.61:8000/jobs/");
+    const res = await axios.get("http://127.0.0.1:8000/jobs/");
     setJobs(res.data);
     if (res.data.length > 0 && !selectedJob) {
       setSelectedJob(res.data[res.data.length - 1].id);

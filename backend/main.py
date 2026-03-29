@@ -11,6 +11,7 @@ import whisper_service
 from pdf_extractor import extract_text_from_pdf
 from google_forms_service import push_to_forms
 models.Base.metadata.create_all(bind=database.engine)
+database.run_migrations()
 
 app = FastAPI(title="Truth-Verified Hiring API")
 
@@ -186,6 +187,25 @@ def terminate_candidate(candidate_id: int, db: Session = Depends(database.get_db
     db.commit()
     return {"message": "Candidate terminated"}
 
+@app.post("/candidates/{candidate_id}/approve")
+def approve_candidate(candidate_id: int, db: Session = Depends(database.get_db)):
+    c = db.query(models.Candidate).filter(models.Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    c.stage = models.CandidateStage.HIRED
+    c.verdict = "Approved by HR"
+    db.commit()
+    return {"message": "Candidate approved"}
+
+@app.delete("/candidates/{candidate_id}")
+def delete_candidate(candidate_id: int, db: Session = Depends(database.get_db)):
+    c = db.query(models.Candidate).filter(models.Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    db.delete(c)
+    db.commit()
+    return {"message": "Candidate deleted"}
+
 @app.post("/candidates/{candidate_id}/submit-task")
 def submit_task(candidate_id: int, background_tasks: BackgroundTasks, db: Session = Depends(database.get_db), task_submission: str = Form(""), mcq_answers: str = Form("{}"), code_answers: str = Form("{}"), task_url: str = Form("")):
     import json
@@ -234,6 +254,20 @@ def submit_task(candidate_id: int, background_tasks: BackgroundTasks, db: Sessio
         "mcq_score": f"{mcq_score}/{mcq_total}",
         "mcq_results": mcq_results
     }
+
+@app.get("/candidates/{candidate_id}/interview-prompt")
+def get_interview_prompt(candidate_id: int, db: Session = Depends(database.get_db)):
+    candidate = db.query(models.Candidate).filter(models.Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    job = db.query(models.Job).filter(models.Job.id == candidate.job_id).first()
+    jd_text = job.generated_jd if job else ""
+    claimed_data = candidate.claimed_data or {}
+    
+    from agents.interview_generator import generate_interview_prompt
+    result = generate_interview_prompt(claimed_data, jd_text)
+    return result
 
 @app.post("/candidates/{candidate_id}/upload-video")
 async def upload_video(candidate_id: int, background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(database.get_db)):

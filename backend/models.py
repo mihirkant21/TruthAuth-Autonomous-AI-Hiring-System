@@ -31,6 +31,7 @@ class Candidate(Base):
     name = Column(String)
     cv_text = Column(Text)
     stage = Column(Enum(CandidateStage), default=CandidateStage.NEW)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
     claimed_data = Column(JSON, nullable=True)
     observed_data = Column(JSON, nullable=True)

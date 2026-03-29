@@ -36,8 +36,8 @@ CANDIDATE PROFILE:
 ROLE:
 Generate a PERSONALIZED interview assessment. Every question MUST be directly related to the candidate's listed skills: {skills_str}
 Do NOT generate generic questions. Each MCQ must test knowledge of one of: {skills_str}
-Each coding challenge must use one or more of: {skills_str}
-The real-world task must simulate a job scenario using: {skills_str}
+Each Practical Challenge must apply their skills to a relevant scenario (if tech role: coding/systems; if non-tech: case studies/drafting).
+The real-world task must simulate a job project using: {skills_str}
 
 OUTPUT FORMAT (STRICT JSON):
 {{
@@ -49,7 +49,7 @@ OUTPUT FORMAT (STRICT JSON):
       "answer": ""
     }}
   ],
-  "coding": [
+  "practical": [
     {{
       "title": "",
       "description": "",
@@ -67,9 +67,9 @@ OUTPUT FORMAT (STRICT JSON):
 
 CONSTRAINTS:
 - Generate EXACTLY:
-  - 3 MCQs (each testing a different skill from the candidate's skill list)
-  - 2 Coding Questions (practical, using the candidate's actual tech stack)
-  - 1 Real-world Task (simulates a real job scenario with their specific tools)
+  - 3 MCQs (testing knowledge relevant to their role and skills)
+  - 2 Practical Challenges (If tech role: generate coding problems. If non-tech role like sales, marketing, HR, or finance: generate scenario-based case studies or situational problems)
+  - 1 Real-world Task (A concrete assignment they must submit via a link, entirely relevant to their profession)
 - MCQs must have 4 options and 1 correct answer
 - No duplicate questions
 - No placeholders
@@ -93,17 +93,17 @@ Return ONLY JSON. Do not include markdown formatting."""
     if not result or not isinstance(result, dict):
         return _fallback_assessment()
 
-    has_mcq    = isinstance(result.get("mcq"), list)    and len(result["mcq"]) >= 1
-    has_coding = isinstance(result.get("coding"), list) and len(result["coding"]) >= 1
-    has_task   = isinstance(result.get("task"), list)   and len(result["task"]) >= 1
+    has_mcq    = isinstance(result.get("mcq"), list)       and len(result["mcq"]) >= 1
+    has_practical = isinstance(result.get("practical"), list) and len(result["practical"]) >= 1
+    has_task   = isinstance(result.get("task"), list)      and len(result["task"]) >= 1
 
-    if not (has_mcq and has_coding and has_task):
+    if not (has_mcq and has_practical and has_task):
         return _fallback_assessment()
 
     # Normalise — trim to exact counts
-    result["mcq"]    = result["mcq"][:3]
-    result["coding"] = result["coding"][:2]
-    result["task"]   = result["task"][:1]
+    result["mcq"]       = result["mcq"][:3]
+    result["practical"] = result["practical"][:2]
+    result["task"]      = result["task"][:1]
 
     if "candidate_level" not in result:
         result["candidate_level"] = "Intermediate"
@@ -137,7 +137,7 @@ def _fallback_assessment() -> dict:
                 "answer": "O(log n)"
             }
         ],
-        "coding": [
+        "practical": [
             {
                 "title": "Reverse a String",
                 "description": "Write a function that takes a string as input and returns it reversed. Handle edge cases like empty strings and single characters.",
