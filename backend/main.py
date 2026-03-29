@@ -71,9 +71,26 @@ def add_candidate(candidate: schemas.CandidateCreate, job_id: int, background_ta
     background_tasks.add_task(orchestrator.run_pipeline, database.SessionLocal(), job_id)
     return db_candidate
 
+@app.get("/candidates/all", response_model=list[schemas.CandidateResponse])
+def get_all_candidates(db: Session = Depends(database.get_db)):
+    return db.query(models.Candidate).all()
+
 @app.get("/candidates/{job_id}", response_model=list[schemas.CandidateResponse])
 def get_candidates(job_id: int, db: Session = Depends(database.get_db)):
     return db.query(models.Candidate).filter(models.Candidate.job_id == job_id).all()
+
+@app.get("/candidates/applications/{name}")
+def get_applications(name: str, db: Session = Depends(database.get_db)):
+    cands = db.query(models.Candidate).filter(models.Candidate.name == name).all()
+    res = []
+    for c in cands:
+        res.append({
+            "job_title": c.job.title if c.job else "Unknown Job",
+            "stage": c.stage.value if hasattr(c.stage, "value") else str(c.stage),
+            "verdict": c.verdict,
+            "applied_on": c.created_at
+        })
+    return res
 
 @app.post("/candidates/extract-cv-info/")
 def extract_cv_info(file: UploadFile = File(...)):
@@ -288,6 +305,48 @@ async def upload_video(candidate_id: int, background_tasks: BackgroundTasks, fil
     background_tasks.add_task(orchestrator.run_pipeline, database.SessionLocal(), c.job_id)
     return {"transcript": transcript}
 
+@app.post("/candidates/{candidate_id}/retranscribe")
+def retranscribe(candidate_id: int, db: Session = Depends(database.get_db)):
+    """Force re-transcribe from the existing uploaded audio file. Useful to fix stale/mock transcripts."""
+    c = db.query(models.Candidate).filter(models.Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    
+    # Find the audio file - check common filenames
+    uploads_dir = "uploads"
+    possible_names = [
+        f"interview_{candidate_id}.webm",
+        f"interview.webm",
+        f"{candidate_id}_interview.webm",
+        f"interview_{candidate_id}.wav",
+        f"interview_{candidate_id}.mp4",
+    ]
+    
+    file_path = None
+    for name in possible_names:
+        p = os.path.join(uploads_dir, name)
+        if os.path.exists(p):
+            file_path = p
+            break
+    
+    # Also scan directory for any file containing candidate id or just the most recent
+    if not file_path:
+        import glob
+        files = sorted(glob.glob(os.path.join(uploads_dir, "*.webm")) + 
+                      glob.glob(os.path.join(uploads_dir, "*.wav")) + 
+                      glob.glob(os.path.join(uploads_dir, "*.mp4")),
+                      key=os.path.getmtime, reverse=True)
+        if files:
+            file_path = files[0]  # most recently uploaded
+    
+    if not file_path:
+        raise HTTPException(status_code=404, detail="No audio file found in uploads directory")
+    
+    transcript = whisper_service.transcribe_audio(file_path)
+    c.interview_transcript = transcript
+    db.commit()
+    return {"transcript": transcript, "file_used": file_path}
+
 @app.post("/run-pipeline/{job_id}")
 def trigger_pipeline(job_id: int, background_tasks: BackgroundTasks, db: Session = Depends(database.get_db)):
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
@@ -303,7 +362,13 @@ def get_audit_logs(db: Session = Depends(database.get_db)):
 @app.get("/download-report/{candidate_id}")
 def download_report(candidate_id: int, db: Session = Depends(database.get_db)):
     candidate = db.query(models.Candidate).filter(models.Candidate.id == candidate_id).first()
-    filepath = generate_report(candidate.name, candidate.scores or {}, candidate.verdict or "Unknown")
+    filepath = generate_report(
+        candidate.name, 
+        candidate.scores or {}, 
+        candidate.verdict or "Unknown",
+        candidate.observed_data or {},
+        candidate.interview_transcript or ""
+    )
     return FileResponse(path=filepath, filename=os.path.basename(filepath), media_type='application/pdf')
 
 @app.get("/candidates/{candidate_id}/assessment")

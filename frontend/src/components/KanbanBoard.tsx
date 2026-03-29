@@ -192,19 +192,21 @@ export default function KanbanBoard({ jobId, refreshTrigger }: { jobId: number |
                      <button onClick={() => window.open(`http://127.0.0.1:8000/download-report/${c.id}`, "_blank")} className="text-purple-400 hover:text-purple-300 text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1">
                        Download Report →
                      </button>
-                     <button
-                       onClick={() => setConfirmDelete(c.id)}
-                       className="text-rose-400 hover:text-rose-300 text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1"
-                     >
+                     <div className="flex items-center gap-1">
                        {confirmDelete === c.id ? (
                          <span className="flex gap-2">
-                           <button onClick={() => deleteCandidate(c.id)} className="text-[10px] font-bold uppercase bg-rose-600 text-white px-2 py-1 rounded">Confirm Delete</button>
-                           <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }} className="text-[10px] font-bold uppercase bg-slate-700 text-slate-300 px-2 py-1 rounded">Cancel</button>
+                           <button onClick={() => deleteCandidate(c.id)} className="text-[10px] font-bold uppercase bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded transition-colors">Confirm Delete</button>
+                           <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }} className="text-[10px] font-bold uppercase bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition-colors">Cancel</button>
                          </span>
                        ) : (
-                         <><Trash2 size={12}/> Delete Record</>
+                         <button
+                           onClick={() => setConfirmDelete(c.id)}
+                           className="text-rose-400 hover:text-rose-300 text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1"
+                         >
+                           <Trash2 size={12}/> Delete Record
+                         </button>
                        )}
-                     </button>
+                     </div>
                    </div>
                  )}
 

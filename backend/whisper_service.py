@@ -13,6 +13,10 @@ def transcribe_audio(file_path: str) -> str:
     try:
         global whisper
         if whisper is None:
+            import imageio_ffmpeg
+            ffmpeg_dir = os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
+            if ffmpeg_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] += os.pathsep + ffmpeg_dir
             import whisper
 
         global model

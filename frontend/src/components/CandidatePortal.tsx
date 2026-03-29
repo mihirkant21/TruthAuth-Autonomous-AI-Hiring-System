@@ -19,6 +19,8 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
   const [isFetchingAssessment, setIsFetchingAssessment] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any>(null);
+  const [interviewSubmitted, setInterviewSubmitted] = useState(false);
+  const [appliedJobsList, setAppliedJobsList] = useState<any[]>([]);
 
   // MCQ: { "0": "answer text", "1": "answer text", ... }
   const [mcqAnswers, setMcqAnswers] = useState<Record<string, string>>({});
@@ -42,6 +44,14 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
     const int = setInterval(fetchStatus, 3000);
     return () => clearInterval(int);
   }, [jobId, candidateId]);
+
+  useEffect(() => {
+    if ((stage === "HIRED" || stage === "REJECTED" || stage === "TRUTH_VERIFIED") && name) {
+      axios.get(`http://127.0.0.1:8000/candidates/applications/${name}`)
+         .then(res => setAppliedJobsList(res.data))
+         .catch(err => console.error("Failed to fetch applications:", err));
+    }
+  }, [stage, name]);
 
   // Fetch assessment once we have a candidateId and no assessment yet
   useEffect(() => {
@@ -146,6 +156,8 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const speechRecogRef = useRef<any>(null);
 
   const startInterview = async () => {
      setInterviewStarted(true);
@@ -163,6 +175,7 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
        const recorder = new MediaRecorder(stream);
        mediaRecorderRef.current = recorder;
        audioChunksRef.current = [];
+       setLiveTranscript("");
 
        recorder.ondataavailable = (e) => {
          if (e.data.size > 0) audioChunksRef.current.push(e.data);
@@ -177,6 +190,31 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
        recorder.start();
        setIsRecording(true);
        setTimeLeft(180);
+
+       // Start live speech recognition (Web Speech API)
+       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+       if (SpeechRecognition) {
+         const recog = new SpeechRecognition();
+         recog.continuous = true;
+         recog.interimResults = true;
+         recog.lang = 'en-US';
+         let finalText = "";
+         recog.onresult = (event: any) => {
+           let interim = "";
+           for (let i = event.resultIndex; i < event.results.length; i++) {
+             const t = event.results[i][0].transcript;
+             if (event.results[i].isFinal) {
+               finalText += t + " ";
+             } else {
+               interim = t;
+             }
+           }
+           setLiveTranscript(finalText + interim);
+         };
+         recog.onerror = () => {};
+         speechRecogRef.current = recog;
+         recog.start();
+       }
      } catch (err) {
        alert("Microphone access denied. Please allow microphone access to proceed.");
      }
@@ -186,11 +224,16 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
      }
+     if (speechRecogRef.current) {
+        speechRecogRef.current.stop();
+        speechRecogRef.current = null;
+     }
      setIsRecording(false);
   };
 
   const submitAudio = async (blob: Blob) => {
      setIsUploadingAudio(true);
+     setInterviewSubmitted(true);
      const formData = new FormData();
      formData.append("file", blob, "interview.webm");
      try {
@@ -198,6 +241,7 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
        fetchStatus();
      } catch (e) {
        alert("Upload failed.");
+       setInterviewSubmitted(false);
      } finally {
        setIsUploadingAudio(false);
      }
@@ -350,7 +394,11 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
             <h2 className="text-2xl font-bold text-slate-100 tracking-tight">Welcome back, {name}</h2>
             <div className="flex items-center gap-2 mt-2">
                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-               <p className="text-purple-400 text-xs font-bold uppercase tracking-widest">{stage?.replace("_", " ")}</p>
+               <p className="text-purple-400 text-xs font-bold uppercase tracking-widest">
+                 {["HIRED", "REJECTED", "TRUTH_VERIFIED"].includes(stage || "") 
+                    ? "EVALUATION COMPLETE"
+                    : stage?.replace("_", " ")}
+               </p>
             </div>
           </div>
 
@@ -562,11 +610,11 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
                         <Loader2 size={40} className="text-purple-500 mb-4 animate-spin" />
                         <span className="font-bold text-slate-200">Generating Personalized Scenario...</span>
                     </div>
-                  ) : isUploadingAudio ? (
+                  ) : isUploadingAudio || interviewSubmitted ? (
                     <div className="bg-[#141c2b] border border-slate-700 rounded-xl p-10 flex flex-col items-center justify-center text-center">
                         <Loader2 size={40} className="text-emerald-500 mb-4 animate-spin" />
-                        <span className="font-bold text-slate-200">Transcribing & Analyzing Response...</span>
-                        <span className="text-xs text-slate-500 mt-2">Whisper neural net is processing your audio.</span>
+                        <span className="font-bold text-slate-200">Processing Audio & Analyzing Response...</span>
+                        <span className="text-xs text-slate-500 mt-2">The system is actively transcribing and validating your answer. Please wait.</span>
                     </div>
                   ) : (
                     <div className="bg-[#141c2b] border border-purple-500/30 rounded-xl overflow-hidden">
@@ -584,7 +632,7 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
                                   <Mic size={20} /> Start Recording
                               </button>
                            ) : (
-                              <div className="flex flex-col items-center gap-4">
+                              <div className="flex flex-col items-center gap-4 w-full">
                                   <div className="flex items-center gap-2 text-rose-400 font-bold animate-pulse text-sm">
                                       <div className="w-3 h-3 rounded-full bg-rose-500"></div> Recording in progress...
                                   </div>
@@ -599,15 +647,44 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
                 </div>
               )}
 
-              {(stage === "HIRED" || stage === "REJECTED") && (
+              {(stage === "HIRED" || stage === "REJECTED" || stage === "TRUTH_VERIFIED") && (
                 <div className="bg-[#0a0e17] border border-slate-800 rounded-xl p-10 flex flex-col items-center text-center">
-                  <CheckCircle size={64} className={`mb-4 ${stage === 'HIRED' ? 'text-purple-400' : 'text-rose-400'}`}/>
+                  <CheckCircle size={64} className="mb-4 text-purple-400" />
                   <h3 className="text-2xl font-bold text-slate-100 mb-2">
-                    {stage === 'HIRED' ? 'Evaluation Verified' : 'Evaluation Terminated'}
+                    Application Complete
                   </h3>
-                  <p className="text-sm text-slate-400 max-w-sm mx-auto">
-                     Your status has been finalized by the Truth-Verification protocol. The results are locked with the HR subsystem.
+                  <p className="text-sm text-slate-300 max-w-sm mx-auto mb-8">
+                     Thank you for completing all phases of the AI assessment pipeline. We will get back to you soon regarding the final decision.
                   </p>
+
+                  <div className="w-full max-w-md mx-auto text-left bg-[#141c2b] rounded-xl border border-slate-800 overflow-hidden">
+                    <div className="p-4 border-b border-slate-800 bg-[#111827]">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                           <Briefcase size={14} className="text-purple-400" /> Jobs You've Applied For
+                        </p>
+                    </div>
+                    <div className="p-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                        {appliedJobsList.length === 0 ? (
+                            <p className="text-xs text-slate-500 p-4 text-center">Fetching records...</p>
+                        ) : (
+                            <div className="space-y-1">
+                                {appliedJobsList.map((app, idx) => (
+                                    <div key={idx} className="flex justify-between items-center p-3 hover:bg-slate-800/50 rounded-lg transition-colors">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-200">{app.job_title}</p>
+                                            <p className="text-[10px] text-slate-500 mt-1">Applied: {app.applied_on ? new Date(app.applied_on).toLocaleDateString() : "Recently"}</p>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[10px] uppercase tracking-widest font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-1 rounded">
+                                                Application Received
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                  </div>
                 </div>
               )}
               
