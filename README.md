@@ -1,4 +1,4 @@
-# TruthAuth: Zero-Trust Autonomous AI Hiring System
+# TruthAuth — Zero-Trust Autonomous AI Hiring System
 
 TruthAuth is a fully autonomous, multi-agent AI hiring system designed with a "Zero-Trust" philosophy. Rather than simply evaluating candidates based on what they claim in their resume, TruthAuth orchestrates multiple AI agents to independently cross-reference the candidate's initial claims against real-world technical task submissions and Whisper-transcribed behavioral interview media. 
 
@@ -6,7 +6,7 @@ By comparing data across all stages of the applicant's lifecycle, the **Core Tru
 
 ---
 
-## 🚀 Core Features
+## 🚀 Key Features
 
 * **End-to-End Autonomy:** Candidates automatically advance through the pipeline simply by interacting with the Candidate Portal. Background tasks on the backend continually execute the necessary LLM inferences across all 8 stages of the hiring funnel as soon as new data is uploaded.
 * **100% Local Multi-Agent Architecture:** All heavy LLM lifting is executed using **local hardware** via Ollama (using `glm4` and `qwen2.5:3b` models). This guarantees that proprietary hiring data and applicant credentials are completely secure and never routed to external APIs like OpenAI.
@@ -59,44 +59,48 @@ The database models enforce a strict timeline of stages:
 
 ---
 
-## ⚙️ Installation & Setup
+## ⚙️ Setup & Installation
 
-### 1. Artificial Intelligence Node (Ollama)
-You must have the local Ollama daemon running to power the agents.
+### 1. Install & Start Ollama
+
+Ollama must be running locally for the agents to work.
+
 ```bash
 # Ensure Ollama is installed on your local machine
 ollama run glm4
 ollama run qwen2.5:3b
 ```
 
-### 2. Backend Environment (Python)
-Navigate to the `backend` directory.
+### 2. Backend
+
 ```bash
 cd backend
+
+# Create virtual environment
 python -m venv venv
 
-# Windows
+# Activate (Windows)
 .\venv\Scripts\activate
-# Mac/Linux
+# Activate (macOS/Linux)
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Boot the FastAPI Server
+# Start the API server
 uvicorn main:app --reload --port 8000
 ```
 > **Note:** The backend requires `ffmpeg` to be installed on your system path for Whisper to process video/audio files correctly.
 
-### 3. Frontend Environment (Next.js)
-Navigate to the `frontend` directory.
+### 3. Frontend
+
 ```bash
 cd frontend
 npm install
-
-# Boot the Next.js UI Server
 npm run dev
 ```
+
+App runs at `http://localhost:3000`.
 
 ---
 
