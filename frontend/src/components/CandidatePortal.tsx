@@ -157,6 +157,7 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
   const audioChunksRef = useRef<BlobPart[]>([]);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const liveTranscriptRef = useRef("");
   const speechRecogRef = useRef<any>(null);
 
   const startInterview = async () => {
@@ -183,7 +184,7 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
 
        recorder.onstop = () => {
          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-         submitAudio(audioBlob);
+         submitAudio(audioBlob, liveTranscriptRef.current);
          stream.getTracks().forEach(track => track.stop());
        };
 
@@ -209,9 +210,23 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
                interim = t;
              }
            }
-           setLiveTranscript(finalText + interim);
+           const newlyBuiltTranscript = finalText + interim;
+           setLiveTranscript(newlyBuiltTranscript);
+           liveTranscriptRef.current = newlyBuiltTranscript;
          };
          recog.onerror = () => {};
+         
+         recog.onend = () => {
+             // Restart recognizing if the recording is still active
+             if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+                 try {
+                     recog.start();
+                 } catch (e) {
+                     console.error("Failed to restart speech recognition", e);
+                 }
+             }
+         };
+         
          speechRecogRef.current = recog;
          recog.start();
        }
@@ -231,11 +246,12 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
      setIsRecording(false);
   };
 
-  const submitAudio = async (blob: Blob) => {
+  const submitAudio = async (blob: Blob, capturedTranscript: string) => {
      setIsUploadingAudio(true);
      setInterviewSubmitted(true);
      const formData = new FormData();
      formData.append("file", blob, "interview.webm");
+     formData.append("transcript", capturedTranscript);
      try {
        await axios.post(`http://127.0.0.1:8000/candidates/${candidateId}/upload-video`, formData);
        fetchStatus();
@@ -639,6 +655,15 @@ export default function CandidatePortal({ jobs, preselectedJobId, onApplicationS
                                   <button onClick={stopRecording} className="bg-rose-500 hover:bg-rose-400 text-white px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
                                       <StopCircle size={20} /> Stop & Submit Answer
                                   </button>
+                                  
+                                  <div className="w-full mt-4 bg-[#0a0e17] border border-slate-700 p-4 rounded-xl min-h-[100px] shadow-inner text-left">
+                                      <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live Speech Transcription
+                                      </p>
+                                      <p className="text-sm text-slate-300 italic min-h-[60px] leading-relaxed">
+                                          {liveTranscript || "Listening for speech..."}
+                                      </p>
+                                  </div>
                               </div>
                            )}
                         </div>

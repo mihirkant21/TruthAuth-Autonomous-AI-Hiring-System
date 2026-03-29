@@ -287,7 +287,7 @@ def get_interview_prompt(candidate_id: int, db: Session = Depends(database.get_d
     return result
 
 @app.post("/candidates/{candidate_id}/upload-video")
-async def upload_video(candidate_id: int, background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(database.get_db)):
+async def upload_video(candidate_id: int, background_tasks: BackgroundTasks, file: UploadFile = File(...), transcript: str = Form(""), db: Session = Depends(database.get_db)):
     c = db.query(models.Candidate).filter(models.Candidate.id == candidate_id).first()
     if not c or c.stage != models.CandidateStage.INTERVIEWED:
         raise HTTPException(status_code=400, detail="Candidate not ready for interview upload")
@@ -299,11 +299,16 @@ async def upload_video(candidate_id: int, background_tasks: BackgroundTasks, fil
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    transcript = whisper_service.transcribe_audio(file_path)
-    c.interview_transcript = transcript
+    whisper_transcript = whisper_service.transcribe_audio(file_path)
+    
+    final_transcript = whisper_transcript
+    if "I have extensive experience" in whisper_transcript or not whisper_transcript.strip():
+        final_transcript = transcript if transcript.strip() else "[No audio detected or browser transcription failed]"
+            
+    c.interview_transcript = final_transcript
     db.commit()
     background_tasks.add_task(orchestrator.run_pipeline, database.SessionLocal(), c.job_id)
-    return {"transcript": transcript}
+    return {"transcript": final_transcript}
 
 @app.post("/candidates/{candidate_id}/retranscribe")
 def retranscribe(candidate_id: int, db: Session = Depends(database.get_db)):
